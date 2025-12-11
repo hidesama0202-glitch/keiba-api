@@ -1,15 +1,14 @@
 {
   "name": "keiba-api",
   "version": "1.0.0",
-  "description": "Japanese horse racing API using Puppeteer on Render",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "cors": "^2.8.5",
     "express": "^4.18.2",
-    "puppeteer": "^23.0.0"
+    "cors": "^2.8.5",
+    "puppeteer": "^22.7.1"
   }
 }
 
