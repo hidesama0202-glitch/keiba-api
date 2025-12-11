@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const chromium = require('chrome-aws-lambda');
-const puppeteer = require('puppeteer-core');
+const puppeteer = require('puppeteer');
 
 const app = express();
 app.use(cors());
@@ -10,12 +9,14 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 async function launchBrowser() {
-  const executablePath = await chromium.executablePath;
-
   return await puppeteer.launch({
-    args: chromium.args,
-    executablePath,
-    headless: chromium.headless
+    channel: "chrome",        // ← Render の内蔵 Chrome を使う
+    headless: true,
+    args: [
+      "--no-sandbox",
+      "--disable-gpu",
+      "--disable-dev-shm-usage"
+    ]
   });
 }
 
@@ -23,24 +24,23 @@ async function fetchRaceListForDate(dateStr) {
   const browser = await launchBrowser();
   const page = await browser.newPage();
 
-  await page.goto('https://www.jra.go.jp/JRADB/accessS.html', {
-    waitUntil: 'networkidle2',
+  await page.goto("https://www.jra.go.jp/JRADB/accessS.html", {
+    waitUntil: "networkidle2",
     timeout: 30000
   });
 
   const races = await page.evaluate((date) => {
     const out = [];
-    const anchors = Array.from(document.querySelectorAll('a'));
+    const anchors = Array.from(document.querySelectorAll("a"));
 
     for (const a of anchors) {
-      const href = a.getAttribute('href') || '';
-      const txt = a.innerText || '';
+      const href = a.getAttribute("href") || "";
+      const txt = a.innerText || "";
 
-      if (href.includes(date.replace(/-/g, '')) || txt.includes(date)) {
+      if (href.includes(date.replace(/-/g, "")) || txt.includes(date)) {
         out.push({ text: txt.trim(), href });
       }
     }
-
     return out.slice(0, 200);
   }, dateStr);
 
@@ -53,26 +53,26 @@ async function fetchRaceDetail(raceUrl) {
   const page = await browser.newPage();
 
   let url = raceUrl;
-  if (!url.startsWith('http')) {
-    url = new URL(url, 'https://www.jra.go.jp/JRADB/accessS.html').href;
+  if (!url.startsWith("http")) {
+    url = new URL(url, "https://www.jra.go.jp/JRADB/accessS.html").href;
   }
 
-  await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+  await page.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
 
   const data = await page.evaluate(() => {
-    const getText = (el) => (el ? el.innerText.trim() : '');
+    const getText = (el) => (el ? el.innerText.trim() : "");
 
     const raceName =
-      getText(document.querySelector('h1')) ||
-      getText(document.querySelector('.race_title')) ||
-      getText(document.querySelector('.title')) ||
+      getText(document.querySelector("h1")) ||
+      getText(document.querySelector(".race_title")) ||
+      getText(document.querySelector(".title")) ||
       document.title;
 
     const horses = [];
-    const rows = document.querySelectorAll('table tr');
+    const rows = document.querySelectorAll("table tr");
 
     rows.forEach((tr) => {
-      const cols = tr.querySelectorAll('td, th');
+      const cols = tr.querySelectorAll("td, th");
       if (cols.length >= 3) {
         const first = cols[0].innerText.trim();
         const second = cols[1].innerText.trim();
@@ -96,7 +96,8 @@ async function fetchRaceDetail(raceUrl) {
 
 app.get('/race', async (req, res) => {
   const date = req.query.date;
-  if (!date) return res.status(400).json({ error: 'date query parameter required' });
+  if (!date)
+    return res.status(400).json({ error: "date query parameter required" });
 
   try {
     const list = await fetchRaceListForDate(date);
@@ -104,7 +105,7 @@ app.get('/race', async (req, res) => {
 
     for (const item of list.slice(0, 6)) {
       let href = item.href;
-      if (href.startsWith('/')) href = 'https://www.jra.go.jp' + href;
+      if (href.startsWith("/")) href = "https://www.jra.go.jp" + href;
 
       const detail = await fetchRaceDetail(href);
       out.push({ link: href, sourceText: item.text, detail });
@@ -122,11 +123,11 @@ app.get('/race', async (req, res) => {
 
 app.get('/', (req, res) => {
   res.json({
-    message: 'Keiba API Ready',
-    usage: '/race?date=YYYY-MM-DD'
+    message: "Keiba API Ready",
+    usage: "/race?date=YYYY-MM-DD"
   });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`Keiba API running on port ${PORT}`);
 });
