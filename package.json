@@ -1,0 +1,14 @@
+{
+  "name": "keiba-api",
+  "version": "1.0.0",
+  "description": "Minimal Keiba API PoC using Puppeteer",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.22.1",
+    "puppeteer": "^21.11.0"
+  }
+}
