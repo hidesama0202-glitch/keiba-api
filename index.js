@@ -1,34 +1,24 @@
 const express = require('express');
-const puppeteer = require('puppeteer');
 const cors = require('cors');
+const chromium = require('chrome-aws-lambda');
+const puppeteer = require('puppeteer-core');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Render の PORT を利用
 const PORT = process.env.PORT || 3000;
 
-/**
- * Puppeteer を起動（executablePath を指定しない＝内蔵 Chromium を使用）
- */
 async function launchBrowser() {
+  const executablePath = await chromium.executablePath;
+
   return await puppeteer.launch({
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-      '--no-zygote',
-      '--single-process'
-    ],
-    headless: true
+    args: chromium.args,
+    executablePath,
+    headless: chromium.headless
   });
 }
 
-/**
- * 指定日のレース一覧を取得
- */
 async function fetchRaceListForDate(dateStr) {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -47,16 +37,7 @@ async function fetchRaceListForDate(dateStr) {
       const txt = a.innerText || '';
 
       if (href.includes(date.replace(/-/g, '')) || txt.includes(date)) {
-        out.push({ text: txt.trim(), href: href });
-      }
-    }
-
-    if (out.length === 0) {
-      for (const a of anchors) {
-        const txt = a.innerText.trim();
-        if (txt.match(/開催|レース|R/)) {
-          out.push({ text: txt, href: a.getAttribute('href') });
-        }
+        out.push({ text: txt.trim(), href });
       }
     }
 
@@ -67,31 +48,25 @@ async function fetchRaceListForDate(dateStr) {
   return races;
 }
 
-/**
- * レース詳細を取得
- */
 async function fetchRaceDetail(raceUrl) {
   const browser = await launchBrowser();
   const page = await browser.newPage();
 
   let url = raceUrl;
-  if (url && !url.startsWith('http')) {
-    url = new URL(raceUrl, 'https://www.jra.go.jp/JRADB/accessS.html').href;
+  if (!url.startsWith('http')) {
+    url = new URL(url, 'https://www.jra.go.jp/JRADB/accessS.html').href;
   }
 
-  try {
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-  } catch (e) {}
+  await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
 
   const data = await page.evaluate(() => {
     const getText = (el) => (el ? el.innerText.trim() : '');
 
-    const raceNameEl =
-      document.querySelector('h1') ||
-      document.querySelector('.race_title') ||
-      document.querySelector('.title');
-
-    const raceName = getText(raceNameEl) || document.title || '';
+    const raceName =
+      getText(document.querySelector('h1')) ||
+      getText(document.querySelector('.race_title')) ||
+      getText(document.querySelector('.title')) ||
+      document.title;
 
     const horses = [];
     const rows = document.querySelectorAll('table tr');
@@ -112,22 +87,6 @@ async function fetchRaceDetail(raceUrl) {
       }
     });
 
-    // table が無いときの fallback
-    if (horses.length === 0) {
-      const lis = document.querySelectorAll('li');
-      lis.forEach((li) => {
-        const txt = li.innerText.trim();
-        const m = txt.match(/^(\d+)\s+(.+?)\s+(\S+)/);
-        if (m) {
-          horses.push({
-            num: parseInt(m[1], 10),
-            name: m[2],
-            jockey: m[3]
-          });
-        }
-      });
-    }
-
     return { raceName, horses };
   });
 
@@ -135,9 +94,6 @@ async function fetchRaceDetail(raceUrl) {
   return data;
 }
 
-/**
- * API: /race?date=YYYY-MM-DD
- */
 app.get('/race', async (req, res) => {
   const date = req.query.date;
   if (!date) return res.status(400).json({ error: 'date query parameter required' });
@@ -146,59 +102,31 @@ app.get('/race', async (req, res) => {
     const list = await fetchRaceListForDate(date);
     const out = [];
 
-    const toFetch = list.slice(0, 6); // 最初の6レースだけ詳細取得
-
-    for (const item of toFetch) {
-      if (!item.href) {
-        out.push({ sourceText: item.text, note: 'no href found' });
-        continue;
-      }
-
+    for (const item of list.slice(0, 6)) {
       let href = item.href;
       if (href.startsWith('/')) href = 'https://www.jra.go.jp' + href;
 
-      try {
-        const detail = await fetchRaceDetail(href);
-        out.push({ link: href, sourceText: item.text, detail });
-      } catch (e) {
-        out.push({ link: href, error: e.message });
-      }
+      const detail = await fetchRaceDetail(href);
+      out.push({ link: href, sourceText: item.text, detail });
     }
 
-    return res.json({
+    res.json({
       date,
       fetchedAt: new Date().toISOString(),
       list: out
     });
   } catch (err) {
-    console.error('API error', err);
-    return res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 
-/**
- * トップ
- */
 app.get('/', (req, res) => {
   res.json({
-    message: 'Keiba API PoC - Japanese Horse Racing Data',
-    version: '1.0.0',
-    usage: 'GET /race?date=YYYY-MM-DD',
-    example: '/race?date=2024-12-08'
+    message: 'Keiba API Ready',
+    usage: '/race?date=YYYY-MM-DD'
   });
 });
 
-/**
- * ヘルスチェック
- */
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-/**
- * サーバ起動
- */
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Keiba API running on port ${PORT}`);
 });
-
