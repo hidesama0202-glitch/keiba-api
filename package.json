@@ -1,7 +1,6 @@
 {
   "name": "keiba-api",
   "version": "1.0.0",
-  "description": "",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -9,10 +8,8 @@
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
-    "puppeteer": "^22.0.0"
-  },
-  "puppeteer": {
-    "skip_chromium_download": true
+    "puppeteer-core": "^22.6.2",
+    "chrome-aws-lambda": "^10.1.0"
   }
 }
 
